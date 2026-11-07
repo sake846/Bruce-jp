@@ -14,6 +14,7 @@
  ****************************************************/
 
 #include "TFT_eSPI.h"
+#include "../misaki/misakiUTF16.h"
 
 #if defined (ESP32)
   #if defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -3153,7 +3154,13 @@ int16_t TFT_eSPI::textWidth(const char *string, uint8_t font)
 #endif
     {
 #ifdef LOAD_GLCD
-      while (*string++) str_width += 6;
+      while (*string) {
+        uniCode = decodeUTF8(*string++);
+        if (uniCode) {
+          if (uniCode < 128) str_width += 6;
+          else str_width += isZenkaku(uniCode) ? 8 : 4;
+        }
+      }
 #endif
     }
   }
@@ -3215,6 +3222,34 @@ void TFT_eSPI::drawChar(int32_t x, int32_t y, uint16_t c, uint32_t color, uint32
 
   int32_t xd = x + _xDatum;
   int32_t yd = y + _yDatum;
+
+  if (c >= 0x80) {
+    uint8_t fontdata[8];
+    if (getFontDataByUTF16(fontdata, c)) {
+      int16_t fwidth = isZenkaku(c) ? 8 : 4;
+      if ((xd >= _vpW) || (yd >= _vpH) ||
+         ((xd + fwidth * size - 1) < _vpX) ||
+         ((yd + 8 * size - 1) < _vpY))
+        return;
+      bool fillbg = (bg != color);
+      inTransaction = true;
+      for (int8_t row = 0; row < 8; row++) {
+        uint8_t line = fontdata[row];
+        for (int8_t col = 0; col < fwidth; col++) {
+          if (line & (0x80 >> col)) {
+            if (size == 1) drawPixel(x + col, y + row, color);
+            else fillRect(x + col * size, y + row * size, size, size, color);
+          } else if (fillbg) {
+            if (size == 1) drawPixel(x + col, y + row, bg);
+            else fillRect(x + col * size, y + row * size, size, size, bg);
+          }
+        }
+      }
+      inTransaction = lockTransaction;
+      end_tft_write();
+      return;
+    }
+  }
 
   if ((xd >= _vpW)                 || // Clip right
      ( yd >= _vpH)                 || // Clip bottom
@@ -5173,7 +5208,7 @@ size_t TFT_eSPI::write(uint8_t utf8)
 
 #ifdef LOAD_GLCD
   if (textfont==1) {
-      cwidth =  6;
+      cwidth = (uniCode >= 128) ? (isZenkaku(uniCode) ? 8 : 4) : 6;
       cheight = 8;
   }
 #else
@@ -5250,6 +5285,7 @@ int16_t TFT_eSPI::drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font)
 #ifdef LOAD_GLCD
   #ifndef LOAD_GFXFF
     drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
+    if (uniCode >= 128) return (isZenkaku(uniCode) ? 8 : 4) * textsize;
     return 6 * textsize;
   #endif
 #else
@@ -5262,6 +5298,7 @@ int16_t TFT_eSPI::drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font)
     drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
     if(!gfxFont) { // 'Classic' built-in font
     #ifdef LOAD_GLCD
+      if (uniCode >= 128) return (isZenkaku(uniCode) ? 8 : 4) * textsize;
       return 6 * textsize;
     #else
       return 0;

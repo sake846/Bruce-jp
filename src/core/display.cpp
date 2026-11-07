@@ -1,4 +1,5 @@
 #include "display.h"
+#include "i18n.h"
 #include "core/wifi/webInterface.h" // for server
 #include "core/wifi/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "mykeyboard.h"
@@ -69,9 +70,9 @@ void TouchFooter(uint16_t color) {
     tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
     tft.setTextColor(color);
     tft.setTextSize(FM);
-    tft.drawCentreString("PREV", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("SEL", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("NEXT", 5 * tftWidth / 6, tftHeight + 4, 1);
+    tft.drawCentreString(tr("PREV"), tftWidth / 6, tftHeight + 4, 1);
+    tft.drawCentreString(tr("SEL"), tftWidth / 2, tftHeight + 4, 1);
+    tft.drawCentreString(tr("NEXT"), 5 * tftWidth / 6, tftHeight + 4, 1);
 #endif
 }
 /***************************************************************************************
@@ -82,9 +83,9 @@ void MegaFooter(uint16_t color) {
     tft.drawRoundRect(5, tftHeight + 2, tftWidth - 10, 43, 5, color);
     tft.setTextColor(color);
     tft.setTextSize(FM);
-    tft.drawCentreString("Exit", tftWidth / 6, tftHeight + 4, 1);
-    tft.drawCentreString("UP", tftWidth / 2, tftHeight + 4, 1);
-    tft.drawCentreString("DOWN", 5 * tftWidth / 6, tftHeight + 4, 1);
+    tft.drawCentreString(tr("Exit"), tftWidth / 6, tftHeight + 4, 1);
+    tft.drawCentreString(tr("UP"), tftWidth / 2, tftHeight + 4, 1);
+    tft.drawCentreString(tr("DOWN"), 5 * tftWidth / 6, tftHeight + 4, 1);
 }
 
 /***************************************************************************************
@@ -834,12 +835,12 @@ Opt_Coord drawOptions(
                 coord.fgcolor = fgcolor;
                 coord.bgcolor = bgcolor;
             } else text += " ";
-            text += String(options[i].label) + "              ";
+            text += String(tr(options[i].label.c_str())) + "              ";
             tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 4);
 
             // Draw text with appropriate colors for selection
             if (i == index) { tft.setTextColor(bgcolor, bruceConfig.priColor); }
-            tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
+            tft.println(safeUtf8Substring(text, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
 
             // Reset text color for next item
             tft.setTextColor(fgcolor, bgcolor);
@@ -867,7 +868,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
     tft.setTextSize(FP);
     tft.drawPixel(0, 0, 0);
     tft.fillRect(6, 30, tftWidth - 12, 8 * FP, bruceConfig.bgColor);
-    tft.drawString(title, 12, 30);
+    tft.drawString(tr(title), 12, 30);
 
     // middle of the drawing area
     int middle = 25 /*status*/ + (tftHeight - 30 /*status + bottom margin*/) / 2;
@@ -882,26 +883,29 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 #endif
     // Previous item
     int firstIndex = index - 1 >= 0 ? index - 1 : menuSize - 1;
-    const char *firstOption = options[firstIndex].label.c_str();
+    const char *firstOption = tr(options[firstIndex].label.c_str());
     tft.setTextColor(options[firstIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_up, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
     tft.drawCentreString(firstOption, tftWidth / 2, middle_up, SMOOTH_FONT);
 
     // Selected item
-    int selectedTextSize = options[index].label.length() <= tftWidth / (LW * FG) - 1 ? FG : FM;
+    const char *selOption = tr(options[index].label.c_str());
+    int lblWidth = tft.textWidth(selOption, SMOOTH_FONT);
+    int selectedTextSize = lblWidth <= (tftWidth - 24) ? FG : FM;
     tft.setTextSize(selectedTextSize);
     tft.setTextColor(options[index].enabled ? bruceConfig.priColor : TFT_DARKGREY);
     tft.fillRect(6, middle - FG * LH / 2 - 1, tftWidth - 12, FG * LH + 5, bruceConfig.bgColor);
-    tft.drawCentreString(options[index].label, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+    tft.drawCentreString(selOption, tftWidth / 2, middle - selectedTextSize * LH / 2, SMOOTH_FONT);
+    lblWidth = tft.textWidth(selOption, SMOOTH_FONT);
     tft.drawFastHLine(
-        tftWidth / 2 - strlen(options[index].label.c_str()) * selectedTextSize * LW / 2,
+        tftWidth / 2 - lblWidth / 2,
         middle + selectedTextSize * LH / 2 + 1,
-        strlen(options[index].label.c_str()) * selectedTextSize * LW,
+        lblWidth,
         bruceConfig.priColor
     );
     // Next Item
     int thirdIndex = index + 1 < menuSize ? index + 1 : 0;
-    const char *thirdOption = options[thirdIndex].label.c_str();
+    const char *thirdOption = tr(options[thirdIndex].label.c_str());
     tft.setTextSize(FM);
     tft.setTextColor(options[thirdIndex].enabled ? bruceConfig.secColor : TFT_DARKGREY);
     tft.fillRect(6, middle_down, tftWidth - 12, 8 * FM, bruceConfig.bgColor);
@@ -913,7 +917,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 #if defined(HAS_TOUCH)
     tft.drawCentreString("\\/", tftWidth / 2, middle_down + (FM * LH + 6), 1);
     tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.drawString("[ x ]", 7, 7, 1);
+    tft.drawString(tr("[ x ]"), 7, 7, 1);
     TouchFooter();
 #endif
 }

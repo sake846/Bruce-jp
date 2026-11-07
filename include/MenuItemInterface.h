@@ -2,6 +2,7 @@
 #define __MENU_ITEM_INTERFACE_H__
 
 #include "core/display.h"
+#include "i18n.h"
 #include <globals.h>
 
 class MenuItemInterface {
@@ -101,8 +102,7 @@ public:
         tft.setTextSize(FM);
         tft.drawPixel(0, 0, 0);
         tft.fillRect(arrowAreaX, titleY, tftWidth - 2 * arrowAreaX, LH * FM, bruceConfig.bgColor);
-        int nchars = (tftWidth - 16) / (LW * FM);
-        tft.drawCentreString(getName().substring(0, nchars), iconCenterX, titleY, 1);
+        tft.drawCentreString(tr(getName()), iconCenterX, titleY, 1);
     }
 
 protected:

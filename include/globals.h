@@ -2,6 +2,7 @@
 #define __GLOBALS__
 
 #include <precompiler_flags.h>
+#include <i18n.h>
 
 #include <interface.h>
 

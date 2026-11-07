@@ -265,7 +265,7 @@ void boot_screen() {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
     tft.drawPixel(0, 0, bruceConfig.bgColor);
-    tft.drawCentreString("Bruce", tftWidth / 2, 10, 1);
+    tft.drawCentreString("Bruce-JP", tftWidth / 2, 10, 1);
     tft.setTextSize(FP);
     tft.drawCentreString(BRUCE_VERSION, tftWidth / 2, 25, 1);
     tft.setTextSize(FM);
@@ -484,7 +484,7 @@ void setup() {
     tft.fillScreen(TFT_BLACK);
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
     tft.setTextColor(TFT_PURPLE, TFT_BLACK);
-    tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
+    tft.drawCentreString("起動中...", tft.width() / 2, tft.height() / 2, 1);
     RAM_LOG("first-display-elem"); // first element drawn on screen
 #else
     tft.begin();
