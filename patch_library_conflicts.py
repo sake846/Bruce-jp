@@ -192,6 +192,18 @@ conflicts = [
         r'ret = rfalRfDev->rfalISO14443ATransceiveShortFrame\(RFAL_14443A_SHORTFRAME_CMD_WUPA, \(uint8_t \*\)&nfcaDevList->sensRes, \(uint8_t\)rfalConvBytesToBits\(sizeof\(rfalNfcaSensRes\)\), &rcvLen, RFAL_NFCA_FDTMIN\);',
         'rfalNfcaTxRetry(ret, rfalRfDev->rfalISO14443ATransceiveShortFrame(RFAL_14443A_SHORTFRAME_CMD_WUPA, (uint8_t *)&nfcaDevList->sensRes, (uint8_t)rfalConvBytesToBits(sizeof(rfalNfcaSensRes)), &rcvLen, RFAL_NFCA_FDTMIN), (/* Bruce: WUPA had no retry at all - see patch_library_conflicts.py */ RFAL_NFCA_N_RETRANS), RFAL_NFCA_T_RETRANS);'
     ),
+    # FastLED: simplify consoleWrite in io_esp_idf.hpp to avoid LTO dangerous relocation with gNativeConsoleWrite
+    (
+        ".pio/libdeps/*/FastLED/src/platforms/esp/32/io_esp_idf.hpp",
+        r'(?s)void consoleWrite\(const char\* str, bool newline\) FL_NO_EXCEPT \{.*?gNativeConsoleWrite\(str, newline\);\n\}',
+        'void consoleWrite(const char* str, bool newline) FL_NO_EXCEPT {\n    (void)str;\n    (void)newline;\n}'
+    ),
+    # FastLED: undefine FP macro leaking from pins_arduino.h to avoid conflict with fl::s16x16 FP
+    (
+        ".pio/libdeps/*/FastLED/src/fl/system/arduino.h",
+        r'// This MUST be immediately after Arduino\.h so macros never leak\.',
+        '// This MUST be immediately after Arduino.h so macros never leak.\n#ifdef FP\n#undef FP\n#endif'
+    ),
     # 2 retries (EMVCo default) is occasionally still not enough margin for PN532's I2C-relayed
     # response time under load; bumped to 4 as a balance between activation reliability and not
     # inflating worst-case discovery latency against genuinely absent tags.

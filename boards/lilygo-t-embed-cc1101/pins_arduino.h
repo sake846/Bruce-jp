@@ -49,9 +49,10 @@ static const uint8_t SCL = GROVE_SCL;
 #define PIN_POWER_ON 15
 
 // Font Sizes
-#define FP 1
-#define FM 2
-#define FG 3
+// FP, FM, FG are defined in precompiler_flags.h
+// #define FP 1
+// #define FM 2
+// #define FG 3
 
 // SD Card
 #define SDCARD_CS 13
@@ -223,9 +224,10 @@ static const uint8_t SCL = GROVE_SCL;
 #define PIN_POWER_ON 46
 
 // Font Sizes#
-#define FP 1
-#define FM 2
-#define FG 3
+// FP, FM, FG are defined in precompiler_flags.h
+// #define FP 1
+// #define FM 2
+// #define FG 3
 
 // SD Card#
 #define SDCARD_CS 39
