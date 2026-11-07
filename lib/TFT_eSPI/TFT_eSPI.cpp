@@ -3292,19 +3292,50 @@ void TFT_eSPI::drawChar(int32_t x, int32_t y, uint16_t c, uint32_t color, uint32
       inTransaction = lockTransaction;
       end_tft_write();
       return;
-    } else {
-      int16_t fsize = size;
+    } else if (size == 4) {
+      int16_t w32 = fwidth * 4;
       if ((xd >= _vpW) || (yd >= _vpH) ||
-         ((xd + fwidth * fsize - 1) < _vpX) ||
-         ((yd + 8 * fsize - 1) < _vpY)) return;
+         ((xd + w32 - 1) < _vpX) ||
+         ((yd + 32 - 1) < _vpY)) return;
+      bool fillbg = (bg != color);
       inTransaction = true;
-      for (int8_t row = 0; row < 8; row++) {
-        uint8_t line = g->data8[row];
-        for (int8_t col = 0; col < fwidth; col++) {
-          if (line & (0x80 >> col)) {
-            fillRect(x + col * fsize, y + row * fsize, fsize, fsize, color);
+      for (int8_t row = 0; row < 32; row++) {
+        uint32_t line = ((uint32_t)g->data32[row * 4] << 24) |
+                        ((uint32_t)g->data32[row * 4 + 1] << 16) |
+                        ((uint32_t)g->data32[row * 4 + 2] << 8) |
+                        ((uint32_t)g->data32[row * 4 + 3]);
+        for (int8_t col = 0; col < w32; col++) {
+          if (line & (0x80000000 >> col)) {
+            drawPixel(x + col, y + row, color);
           } else if (fillbg) {
-            fillRect(x + col * fsize, y + row * fsize, fsize, fsize, bg);
+            drawPixel(x + col, y + row, bg);
+          }
+        }
+      }
+      inTransaction = lockTransaction;
+      end_tft_write();
+      return;
+    } else {
+      // Scale from 32px bitmap for size > 4
+      int16_t target_w = fwidth * size;
+      int16_t target_h = 8 * size;
+      if ((xd >= _vpW) || (yd >= _vpH) ||
+         ((xd + target_w - 1) < _vpX) ||
+         ((yd + target_h - 1) < _vpY)) return;
+      bool fillbg = (bg != color);
+      inTransaction = true;
+      for (int16_t row = 0; row < target_h; row++) {
+        int8_t src_row = (row * 4) / size;
+        uint32_t line = ((uint32_t)g->data32[src_row * 4] << 24) |
+                        ((uint32_t)g->data32[src_row * 4 + 1] << 16) |
+                        ((uint32_t)g->data32[src_row * 4 + 2] << 8) |
+                        ((uint32_t)g->data32[src_row * 4 + 3]);
+        for (int16_t col = 0; col < target_w; col++) {
+          int8_t src_col = (col * 4) / size;
+          if (line & (0x80000000 >> src_col)) {
+            drawPixel(x + col, y + row, color);
+          } else if (fillbg) {
+            drawPixel(x + col, y + row, bg);
           }
         }
       }

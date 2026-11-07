@@ -126,6 +126,16 @@ def render_bitmap(char, target_w, target_h, font, baseline_y, thresh=128):
             data.append((row_val >> 16) & 0xFF)
             data.append((row_val >> 8) & 0xFF)
             data.append(row_val & 0xFF)
+    elif target_h == 32:
+        for y in range(32):
+            row_val = 0
+            for x in range(target_w):
+                if img.getpixel((x, y)):
+                    row_val |= (0x80000000 >> x)
+            data.append((row_val >> 24) & 0xFF)
+            data.append((row_val >> 16) & 0xFF)
+            data.append((row_val >> 8) & 0xFF)
+            data.append(row_val & 0xFF)
     return data
 
 def main():
@@ -140,14 +150,17 @@ def main():
     shinonome_map = load_shinonome_map()
     print(f"Loaded {len(shinonome_map)} glyphs from Shinonome font.")
 
+    font_mplus32 = None
     font_mplus24 = None
     font_mplus16 = None
     font_mplus8 = None
     bl8 = 7
     bl16 = 13
     bl24 = 19
+    bl32 = 25
     if os.path.exists(MPLUS_TTF):
-        print("Loading M+ font (SIL OFL 1.1) for 24px and fallbacks...")
+        print("Loading M+ font (SIL OFL 1.1) for 24px, 32px and fallbacks...")
+        font_mplus32 = ImageFont.truetype(MPLUS_TTF, 27)
         font_mplus24 = ImageFont.truetype(MPLUS_TTF, 21)
         font_mplus16 = ImageFont.truetype(MPLUS_TTF, 15)
         font_mplus8 = ImageFont.truetype(MPLUS_TTF, 8)
@@ -198,13 +211,22 @@ def main():
         else:
             data24 = [0] * 72
 
+        # 4. 32x32 bitmap (M+ OFL 27pt centered with baseline anchor)
+        target_w32 = width * 4
+        data32 = None
+        if font_mplus32:
+            data32 = render_bitmap(c, target_w32, 32, font_mplus32, bl32)
+        else:
+            data32 = [0] * 128
+
         glyphs.append({
             "unicode": u,
             "char": c,
             "width": width,
             "data8": data8,
             "data16": data16,
-            "data24": data24
+            "data24": data24,
+            "data32": data32
         })
 
     # Generate Header
@@ -214,7 +236,8 @@ def main():
         f.write("// Free Japanese & Latin Font Subset with Direct Display Size Optimization\n")
         f.write("// Size 1 (8px):   Misaki Font (CJK) / M+ (ASCII)\n")
         f.write("// Size 2 (16px):  Shinonome Font (CJK) / M+ (ASCII)\n")
-        f.write("// Size 3 (24px):  M+ Font (SIL OFL 1.1) for all glyphs\n\n")
+        f.write("// Size 3 (24px):  M+ Font (SIL OFL 1.1) for all glyphs\n")
+        f.write("// Size 4 (32px):  M+ Font (SIL OFL 1.1) for all glyphs\n\n")
         f.write("#include <stdint.h>\n")
         f.write("#include <stddef.h>\n\n")
         f.write("struct SubsetGlyph {\n")
@@ -223,6 +246,7 @@ def main():
         f.write("    uint8_t data8[8];   // 8x8 font bitmap (size 1: 1 byte per row)\n")
         f.write("    uint8_t data16[32]; // 16x16 font bitmap (size 2: 2 bytes per row, MSB on left)\n")
         f.write("    uint8_t data24[72]; // 24x24 font bitmap (size 3: 3 bytes per row, MSB on left)\n")
+        f.write("    uint8_t data32[128]; // 32x32 font bitmap (size 4: 4 bytes per row, MSB on left)\n")
         f.write("};\n\n")
         f.write("extern const SubsetGlyph kSubsetGlyphs[];\n")
         f.write("extern const size_t kSubsetGlyphsCount;\n\n")
@@ -239,13 +263,15 @@ def main():
             d8_str = ", ".join(f"0x{b:02X}" for b in g["data8"])
             d16_str = ", ".join(f"0x{b:02X}" for b in g["data16"])
             d24_str = ", ".join(f"0x{b:02X}" for b in g["data24"])
+            d32_str = ", ".join(f"0x{b:02X}" for b in g["data32"])
             comment = g['char'] if g['char'] not in ('\\', '"', '\n', '\r', '\t') else f"U+{g['unicode']:04X}"
             f.write(f"    // '{comment}' ({u_hex})\n")
             f.write(f"    {{\n")
             f.write(f"        {u_hex}, {g['width']},\n")
             f.write(f"        {{ {d8_str} }},\n")
             f.write(f"        {{ {d16_str} }},\n")
-            f.write(f"        {{ {d24_str} }}\n")
+            f.write(f"        {{ {d24_str} }},\n")
+            f.write(f"        {{ {d32_str} }}\n")
             f.write(f"    }},\n")
         f.write("};\n\n")
         f.write(f"const size_t kSubsetGlyphsCount = sizeof(kSubsetGlyphs) / sizeof(kSubsetGlyphs[0]);\n\n")
