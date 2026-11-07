@@ -3157,11 +3157,10 @@ int16_t TFT_eSPI::textWidth(const char *string, uint8_t font)
       while (*string) {
         uniCode = decodeUTF8(*string++);
         if (uniCode) {
-          if (uniCode < 128) str_width += 6;
-          else {
-            const SubsetGlyph* g = getSubsetGlyph(uniCode);
-            str_width += g ? g->width : ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8);
-          }
+          const SubsetGlyph* g = getSubsetGlyph(uniCode);
+          if (g) str_width += g->width;
+          else if (uniCode < 128) str_width += 6;
+          else str_width += ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8);
         }
       }
 #endif
@@ -3226,72 +3225,92 @@ void TFT_eSPI::drawChar(int32_t x, int32_t y, uint16_t c, uint32_t color, uint32
   int32_t xd = x + _xDatum;
   int32_t yd = y + _yDatum;
 
-  if (c >= 0x80) {
-    const SubsetGlyph* g = getSubsetGlyph(c);
-    if (!g) {
-      g = getSubsetGlyph(0x25A1); // Fallback to '□' if not found
-    }
-    if (g) {
-      int16_t fwidth = g->width;
-      bool fillbg = (bg != color);
+  const SubsetGlyph* g = getSubsetGlyph(c);
+  if (!g && c >= 0x80) {
+    g = getSubsetGlyph(0x25A1); // Fallback to '□' if not found
+  }
+  if (g) {
+    int16_t fwidth = g->width;
+    bool fillbg = (bg != color);
 
-      if (size == 1) {
-        if ((xd >= _vpW) || (yd >= _vpH) ||
-           ((xd + fwidth - 1) < _vpX) ||
-           ((yd + 8 - 1) < _vpY)) return;
-        inTransaction = true;
-        for (int8_t row = 0; row < 8; row++) {
-          uint8_t line = g->data8[row];
-          for (int8_t col = 0; col < fwidth; col++) {
-            if (line & (0x80 >> col)) {
-              drawPixel(x + col, y + row, color);
-            } else if (fillbg) {
-              drawPixel(x + col, y + row, bg);
-            }
+    if (size == 1) {
+      if ((xd >= _vpW) || (yd >= _vpH) ||
+         ((xd + fwidth - 1) < _vpX) ||
+         ((yd + 8 - 1) < _vpY)) return;
+      inTransaction = true;
+      for (int8_t row = 0; row < 8; row++) {
+        uint8_t line = g->data8[row];
+        for (int8_t col = 0; col < fwidth; col++) {
+          if (line & (0x80 >> col)) {
+            drawPixel(x + col, y + row, color);
+          } else if (fillbg) {
+            drawPixel(x + col, y + row, bg);
           }
         }
-        inTransaction = lockTransaction;
-        end_tft_write();
-        return;
-      } else if (size == 2) {
-        int16_t w16 = (fwidth == 4) ? 8 : 16;
-        if ((xd >= _vpW) || (yd >= _vpH) ||
-           ((xd + w16 - 1) < _vpX) ||
-           ((yd + 16 - 1) < _vpY)) return;
-        inTransaction = true;
-        for (int8_t row = 0; row < 16; row++) {
-          uint16_t line = ((uint16_t)g->data16[row * 2] << 8) | g->data16[row * 2 + 1];
-          for (int8_t col = 0; col < w16; col++) {
-            if (line & (0x8000 >> col)) {
-              drawPixel(x + col, y + row, color);
-            } else if (fillbg) {
-              drawPixel(x + col, y + row, bg);
-            }
-          }
-        }
-        inTransaction = lockTransaction;
-        end_tft_write();
-        return;
-      } else {
-        int16_t fsize = size;
-        if ((xd >= _vpW) || (yd >= _vpH) ||
-           ((xd + fwidth * fsize - 1) < _vpX) ||
-           ((yd + 8 * fsize - 1) < _vpY)) return;
-        inTransaction = true;
-        for (int8_t row = 0; row < 8; row++) {
-          uint8_t line = g->data8[row];
-          for (int8_t col = 0; col < fwidth; col++) {
-            if (line & (0x80 >> col)) {
-              fillRect(x + col * fsize, y + row * fsize, fsize, fsize, color);
-            } else if (fillbg) {
-              fillRect(x + col * fsize, y + row * fsize, fsize, fsize, bg);
-            }
-          }
-        }
-        inTransaction = lockTransaction;
-        end_tft_write();
-        return;
       }
+      inTransaction = lockTransaction;
+      end_tft_write();
+      return;
+    } else if (size == 2) {
+      int16_t w16 = fwidth * 2;
+      if ((xd >= _vpW) || (yd >= _vpH) ||
+         ((xd + w16 - 1) < _vpX) ||
+         ((yd + 16 - 1) < _vpY)) return;
+      inTransaction = true;
+      for (int8_t row = 0; row < 16; row++) {
+        uint16_t line = ((uint16_t)g->data16[row * 2] << 8) | g->data16[row * 2 + 1];
+        for (int8_t col = 0; col < w16; col++) {
+          if (line & (0x8000 >> col)) {
+            drawPixel(x + col, y + row, color);
+          } else if (fillbg) {
+            drawPixel(x + col, y + row, bg);
+          }
+        }
+      }
+      inTransaction = lockTransaction;
+      end_tft_write();
+      return;
+    } else if (size == 3) {
+      int16_t w24 = fwidth * 3;
+      if ((xd >= _vpW) || (yd >= _vpH) ||
+         ((xd + w24 - 1) < _vpX) ||
+         ((yd + 24 - 1) < _vpY)) return;
+      bool fillbg = (bg != color);
+      inTransaction = true;
+      for (int8_t row = 0; row < 24; row++) {
+        uint32_t line = ((uint32_t)g->data24[row * 3] << 16) |
+                        ((uint32_t)g->data24[row * 3 + 1] << 8) |
+                        ((uint32_t)g->data24[row * 3 + 2]);
+        for (int8_t col = 0; col < w24; col++) {
+          if (line & (0x800000 >> col)) {
+            drawPixel(x + col, y + row, color);
+          } else if (fillbg) {
+            drawPixel(x + col, y + row, bg);
+          }
+        }
+      }
+      inTransaction = lockTransaction;
+      end_tft_write();
+      return;
+    } else {
+      int16_t fsize = size;
+      if ((xd >= _vpW) || (yd >= _vpH) ||
+         ((xd + fwidth * fsize - 1) < _vpX) ||
+         ((yd + 8 * fsize - 1) < _vpY)) return;
+      inTransaction = true;
+      for (int8_t row = 0; row < 8; row++) {
+        uint8_t line = g->data8[row];
+        for (int8_t col = 0; col < fwidth; col++) {
+          if (line & (0x80 >> col)) {
+            fillRect(x + col * fsize, y + row * fsize, fsize, fsize, color);
+          } else if (fillbg) {
+            fillRect(x + col * fsize, y + row * fsize, fsize, fsize, bg);
+          }
+        }
+      }
+      inTransaction = lockTransaction;
+      end_tft_write();
+      return;
     }
   }
 
@@ -5252,11 +5271,13 @@ size_t TFT_eSPI::write(uint8_t utf8)
 
 #ifdef LOAD_GLCD
   if (textfont==1) {
-      if (uniCode >= 128) {
-          const SubsetGlyph* g = getSubsetGlyph(uniCode);
-          cwidth = g ? g->width : ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8);
-      } else {
+      const SubsetGlyph* g = getSubsetGlyph(uniCode);
+      if (g) {
+          cwidth = g->width;
+      } else if (uniCode < 128) {
           cwidth = 6;
+      } else {
+          cwidth = ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8);
       }
       cheight = 8;
   }
@@ -5334,11 +5355,10 @@ int16_t TFT_eSPI::drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font)
 #ifdef LOAD_GLCD
   #ifndef LOAD_GFXFF
     drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
-    if (uniCode >= 128) {
-      const SubsetGlyph* g = getSubsetGlyph(uniCode);
-      return (g ? g->width : ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8)) * textsize;
-    }
-    return 6 * textsize;
+    const SubsetGlyph* g = getSubsetGlyph(uniCode);
+    if (g) return g->width * textsize;
+    if (uniCode < 128) return 6 * textsize;
+    return ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8) * textsize;
   #endif
 #else
   #ifndef LOAD_GFXFF
@@ -5350,11 +5370,10 @@ int16_t TFT_eSPI::drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font)
     drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
     if(!gfxFont) { // 'Classic' built-in font
     #ifdef LOAD_GLCD
-      if (uniCode >= 128) {
-        const SubsetGlyph* g = getSubsetGlyph(uniCode);
-        return (g ? g->width : ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8)) * textsize;
-      }
-      return 6 * textsize;
+      const SubsetGlyph* g = getSubsetGlyph(uniCode);
+      if (g) return g->width * textsize;
+      if (uniCode < 128) return 6 * textsize;
+      return ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8) * textsize;
     #else
       return 0;
     #endif

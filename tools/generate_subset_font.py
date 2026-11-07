@@ -13,14 +13,17 @@ OUT_CPP = os.path.join(REPO_ROOT, "lib", "misaki", "subset_font.cpp")
 def collect_chars():
     chars = set()
 
-    # 1. i18n.h
+    # 1. Full printable ASCII (0x20 to 0x7E)
+    chars.update(chr(c) for c in range(0x20, 0x7F))
+
+    # 2. i18n.h
     if os.path.exists(I18N_PATH):
         with open(I18N_PATH, "r", encoding="utf-8", errors="ignore") as f:
             for c in f.read():
                 if 128 <= ord(c) <= 0xFFFF:
                     chars.add(c)
 
-    # 2. Scan src for non-ascii
+    # 3. Scan src for non-ascii
     src_dir = os.path.join(REPO_ROOT, "src")
     for root, _, files in os.walk(src_dir):
         for file in files:
@@ -30,13 +33,13 @@ def collect_chars():
                         if 128 <= ord(c) <= 0xFFFF:
                             chars.add(c)
 
-    # 3. Add Kana and common symbols
+    # 4. Add Kana and common symbols
     chars.update(chr(c) for c in range(0x3041, 0x3097)) # Hiragana
     chars.update(chr(c) for c in range(0x30A1, 0x30FB)) # Katakana
     chars.update(chr(c) for c in range(0xFF61, 0xFFA0)) # Hankaku Katakana
     chars.update("、。・！？ー〜「」『』（）［］＋−×÷＝％＆￥＄＠＃＊：；…／℃°□")
 
-    return sorted([c for c in chars if 128 <= ord(c) <= 0xFFFF], key=lambda c: ord(c))
+    return sorted([c for c in chars if ord(c) <= 0xFFFF], key=lambda c: ord(c))
 
 def load_misaki_data():
     if not os.path.exists(MISAKI_HPP):
@@ -89,23 +92,44 @@ def load_shinonome_map():
             pass
     return shnm_map
 
-def render_16x16_fallback(char, font, is_hankaku):
-    w = 8 if is_hankaku else 16
-    img = Image.new("1", (w, 16), 0)
-    draw = ImageDraw.Draw(img)
-    draw.text((0, 0), char, font=font, fill=1)
+def render_bitmap(char, target_w, target_h, font, baseline_y, thresh=128):
+    img = Image.new("L", (target_w, target_h), 0)
+    if char != ' ':
+        draw = ImageDraw.Draw(img)
+        w = int(font.getlength(char))
+        x_off = max(0, (target_w - w) // 2)
+        draw.text((x_off, baseline_y), char, font=font, fill=255, anchor='ls')
+        img = img.point(lambda p: 1 if p >= thresh else 0, mode='1')
+
     data = []
-    for y in range(16):
-        row_val = 0
-        for x in range(w):
-            if img.getpixel((x, y)):
-                row_val |= (0x8000 >> x)
-        data.append((row_val >> 8) & 0xFF)
-        data.append(row_val & 0xFF)
+    if target_h == 8:
+        for y in range(8):
+            b = 0
+            for x in range(target_w):
+                if img.getpixel((x, y)):
+                    b |= (0x80 >> x)
+            data.append(b)
+    elif target_h == 16:
+        for y in range(16):
+            row_val = 0
+            for x in range(target_w):
+                if img.getpixel((x, y)):
+                    row_val |= (0x8000 >> x)
+            data.append((row_val >> 8) & 0xFF)
+            data.append(row_val & 0xFF)
+    elif target_h == 24:
+        for y in range(24):
+            row_val = 0
+            for x in range(target_w):
+                if img.getpixel((x, y)):
+                    row_val |= (0x800000 >> x)
+            data.append((row_val >> 16) & 0xFF)
+            data.append((row_val >> 8) & 0xFF)
+            data.append(row_val & 0xFF)
     return data
 
 def main():
-    print("Collecting characters...")
+    print("Collecting characters (including full ASCII)...")
     chars = collect_chars()
     print(f"Total unique characters to generate: {len(chars)}")
 
@@ -116,71 +140,89 @@ def main():
     shinonome_map = load_shinonome_map()
     print(f"Loaded {len(shinonome_map)} glyphs from Shinonome font.")
 
+    font_mplus24 = None
     font_mplus16 = None
     font_mplus8 = None
+    bl8 = 7
+    bl16 = 13
+    bl24 = 19
     if os.path.exists(MPLUS_TTF):
-        print("Loading M+ font (SIL OFL 1.1) for halfwidth/fallback...")
-        font_mplus16 = ImageFont.truetype(MPLUS_TTF, 16)
+        print("Loading M+ font (SIL OFL 1.1) for 24px and fallbacks...")
+        font_mplus24 = ImageFont.truetype(MPLUS_TTF, 21)
+        font_mplus16 = ImageFont.truetype(MPLUS_TTF, 15)
         font_mplus8 = ImageFont.truetype(MPLUS_TTF, 8)
 
     glyphs = []
     for c in chars:
         u = ord(c)
-        is_hankaku = (0xFF61 <= u <= 0xFF9F)
-        width = 4 if is_hankaku else 8
+        if 0x20 <= u <= 0x7E:
+            width = 6  # standard LW=6 for ASCII
+        elif 0xFF61 <= u <= 0xFF9F:
+            width = 4  # hankaku kana
+        else:
+            width = 8  # zenkaku
 
-        # 1. 8x8 bitmap (Misaki font)
+        # 1. 8x8 bitmap (Misaki font for CJK, or M+ rendered)
         data8 = None
         if uni_entries and u < len(uni_entries):
             idx = uni_entries[u]
             if idx != 0xFFFF and idx < len(data_entries):
-                data8 = data_entries[idx]
+                raw8 = data_entries[idx]
+                if width == 6:
+                    # Align misaki 8x8 to width 6 if needed, or use M+
+                    data8 = None
+                else:
+                    data8 = raw8
 
         if not data8 and font_mplus8:
-            img8 = Image.new("1", (width, 8), 0)
-            draw8 = ImageDraw.Draw(img8)
-            draw8.text((0, 0), c, font=font_mplus8, fill=1)
-            data8 = []
-            for y in range(8):
-                b = 0
-                for x in range(width):
-                    if img8.getpixel((x, y)):
-                        b |= (0x80 >> x)
-                data8.append(b)
+            data8 = render_bitmap(c, width, 8, font_mplus8, bl8, thresh=96)
 
         if not data8:
             data8 = [0] * 8
 
-        # 2. 16x16 bitmap (Shinonome font -> M+ OFL fallback)
-        data16 = shinonome_map.get(u)
-        if not data16:
-            if font_mplus16:
-                data16 = render_16x16_fallback(c, font_mplus16, is_hankaku)
-            else:
-                data16 = [0] * 32
+        # 2. 16x16 bitmap (Shinonome font for CJK, M+ for ASCII/fallbacks)
+        target_w16 = width * 2
+        data16 = None
+        if width == 8 and u in shinonome_map:
+            data16 = shinonome_map[u]
+        elif font_mplus16:
+            data16 = render_bitmap(c, target_w16, 16, font_mplus16, bl16)
+        else:
+            data16 = [0] * 32
+
+        # 3. 24x24 bitmap (M+ OFL 21pt centered with baseline anchor)
+        target_w24 = width * 3
+        data24 = None
+        if font_mplus24:
+            data24 = render_bitmap(c, target_w24, 24, font_mplus24, bl24)
+        else:
+            data24 = [0] * 72
 
         glyphs.append({
             "unicode": u,
             "char": c,
             "width": width,
             "data8": data8,
-            "data16": data16
+            "data16": data16,
+            "data24": data24
         })
 
     # Generate Header
     print(f"Writing {OUT_HEADER}...")
     with open(OUT_HEADER, "w", encoding="utf-8") as f:
         f.write("#pragma once\n")
-        f.write("// Free Japanese Font Subset\n")
-        f.write("// 16x16: Shinonome Font (Public Domain) / M+ Font (SIL OFL 1.1)\n")
-        f.write("// 8x8:   Misaki Font (Free / Public Domain)\n\n")
+        f.write("// Free Japanese & Latin Font Subset with Direct Display Size Optimization\n")
+        f.write("// Size 1 (8px):   Misaki Font (CJK) / M+ (ASCII)\n")
+        f.write("// Size 2 (16px):  Shinonome Font (CJK) / M+ (ASCII)\n")
+        f.write("// Size 3 (24px):  M+ Font (SIL OFL 1.1) for all glyphs\n\n")
         f.write("#include <stdint.h>\n")
         f.write("#include <stddef.h>\n\n")
         f.write("struct SubsetGlyph {\n")
         f.write("    uint16_t unicode;\n")
-        f.write("    uint8_t width;      // 8 for fullwidth, 4 for halfwidth\n")
-        f.write("    uint8_t data8[8];   // 8x8 font bitmap (1 byte per row)\n")
-        f.write("    uint8_t data16[32]; // 16x16 font bitmap (2 bytes per row, MSB on left)\n")
+        f.write("    uint8_t width;      // 8 for fullwidth, 6 for ASCII, 4 for halfwidth kana\n")
+        f.write("    uint8_t data8[8];   // 8x8 font bitmap (size 1: 1 byte per row)\n")
+        f.write("    uint8_t data16[32]; // 16x16 font bitmap (size 2: 2 bytes per row, MSB on left)\n")
+        f.write("    uint8_t data24[72]; // 24x24 font bitmap (size 3: 3 bytes per row, MSB on left)\n")
         f.write("};\n\n")
         f.write("extern const SubsetGlyph kSubsetGlyphs[];\n")
         f.write("extern const size_t kSubsetGlyphsCount;\n\n")
@@ -190,18 +232,20 @@ def main():
     print(f"Writing {OUT_CPP}...")
     with open(OUT_CPP, "w", encoding="utf-8") as f:
         f.write('#include "subset_font.h"\n\n')
-        f.write("// Fully open-source / public domain Japanese font glyph dataset\n")
+        f.write("// Fully open-source / public domain font glyph dataset (Japanese + Latin)\n")
         f.write("const SubsetGlyph kSubsetGlyphs[] = {\n")
         for g in glyphs:
             u_hex = f"0x{g['unicode']:04X}"
             d8_str = ", ".join(f"0x{b:02X}" for b in g["data8"])
             d16_str = ", ".join(f"0x{b:02X}" for b in g["data16"])
-            comment = g['char'] if g['char'] not in ('\\', '"', '\n', '\r') else f"U+{g['unicode']:04X}"
+            d24_str = ", ".join(f"0x{b:02X}" for b in g["data24"])
+            comment = g['char'] if g['char'] not in ('\\', '"', '\n', '\r', '\t') else f"U+{g['unicode']:04X}"
             f.write(f"    // '{comment}' ({u_hex})\n")
             f.write(f"    {{\n")
             f.write(f"        {u_hex}, {g['width']},\n")
             f.write(f"        {{ {d8_str} }},\n")
-            f.write(f"        {{ {d16_str} }}\n")
+            f.write(f"        {{ {d16_str} }},\n")
+            f.write(f"        {{ {d24_str} }}\n")
             f.write(f"    }},\n")
         f.write("};\n\n")
         f.write(f"const size_t kSubsetGlyphsCount = sizeof(kSubsetGlyphs) / sizeof(kSubsetGlyphs[0]);\n\n")
@@ -222,7 +266,7 @@ def main():
         f.write("    return nullptr;\n")
         f.write("}\n")
 
-    print(f"Success! Generated {len(glyphs)} glyphs from 100% free fonts.")
+    print(f"Success! Generated {len(glyphs)} glyphs (including full ASCII).")
 
 if __name__ == "__main__":
     main()
