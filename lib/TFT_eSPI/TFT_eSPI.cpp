@@ -14,7 +14,7 @@
  ****************************************************/
 
 #include "TFT_eSPI.h"
-#include "../misaki/misakiUTF16.h"
+#include "../misaki/misaki.hpp"
 
 #if defined (ESP32)
   #if defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -3158,7 +3158,7 @@ int16_t TFT_eSPI::textWidth(const char *string, uint8_t font)
         uniCode = decodeUTF8(*string++);
         if (uniCode) {
           if (uniCode < 128) str_width += 6;
-          else str_width += isZenkaku(uniCode) ? 8 : 4;
+          else str_width += (uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8;
         }
       }
 #endif
@@ -3224,9 +3224,9 @@ void TFT_eSPI::drawChar(int32_t x, int32_t y, uint16_t c, uint32_t color, uint32
   int32_t yd = y + _yDatum;
 
   if (c >= 0x80) {
-    uint8_t fontdata[8];
-    if (getFontDataByUTF16(fontdata, c)) {
-      int16_t fwidth = isZenkaku(c) ? 8 : 4;
+    const uint8_t* fontdata = getFontData(c);
+    if (fontdata) {
+      int16_t fwidth = (c >= 0xFF61 && c <= 0xFF9F) ? 4 : 8;
       if ((xd >= _vpW) || (yd >= _vpH) ||
          ((xd + fwidth * size - 1) < _vpX) ||
          ((yd + 8 * size - 1) < _vpY))
@@ -5208,7 +5208,7 @@ size_t TFT_eSPI::write(uint8_t utf8)
 
 #ifdef LOAD_GLCD
   if (textfont==1) {
-      cwidth = (uniCode >= 128) ? (isZenkaku(uniCode) ? 8 : 4) : 6;
+      cwidth = (uniCode >= 128) ? ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8) : 6;
       cheight = 8;
   }
 #else
@@ -5285,7 +5285,7 @@ int16_t TFT_eSPI::drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font)
 #ifdef LOAD_GLCD
   #ifndef LOAD_GFXFF
     drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
-    if (uniCode >= 128) return (isZenkaku(uniCode) ? 8 : 4) * textsize;
+    if (uniCode >= 128) return ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8) * textsize;
     return 6 * textsize;
   #endif
 #else
@@ -5298,7 +5298,7 @@ int16_t TFT_eSPI::drawChar(uint16_t uniCode, int32_t x, int32_t y, uint8_t font)
     drawChar(x, y, uniCode, textcolor, textbgcolor, textsize);
     if(!gfxFont) { // 'Classic' built-in font
     #ifdef LOAD_GLCD
-      if (uniCode >= 128) return (isZenkaku(uniCode) ? 8 : 4) * textsize;
+      if (uniCode >= 128) return ((uniCode >= 0xFF61 && uniCode <= 0xFF9F) ? 4 : 8) * textsize;
       return 6 * textsize;
     #else
       return 0;
