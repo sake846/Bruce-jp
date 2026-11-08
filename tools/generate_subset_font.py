@@ -165,6 +165,34 @@ def main():
         font_mplus16 = ImageFont.truetype(MPLUS_TTF, 15)
         font_mplus8 = ImageFont.truetype(MPLUS_TTF, 8)
 
+    # Sets of characters used per font size
+    all_chars_set = set(chars)
+    ascii_set = set(chr(c) for c in range(0x20, 0x7F)) & all_chars_set
+
+    i18n_set = set()
+    if os.path.exists(I18N_PATH):
+        with open(I18N_PATH, "r", encoding="utf-8", errors="ignore") as f:
+            for c in f.read():
+                if 128 <= ord(c) <= 0xFFFF:
+                    i18n_set.add(c)
+    i18n_set &= all_chars_set
+
+    kana_set = set(chr(c) for c in range(0x3041, 0x3097)) # Hiragana
+    kana_set.update(chr(c) for c in range(0x30A1, 0x30FB)) # Katakana
+    kana_set.update(chr(c) for c in range(0xFF61, 0xFFA0)) # Hankaku
+    kana_set.update("、。・！？ー〜「」『』（）［］＋−×÷＝％＆￥＄＠＃＊：；…／℃°□")
+    kana_set &= all_chars_set
+
+    # Size 1 (8px):  All characters (base font, logs, footers, headers)
+    # Size 2 (16px): Menus, UI, keyboard, dialogs (ASCII + i18n + Kana/symbols)
+    # Size 3 (24px): Prominent/selected menu items, titles (ASCII + i18n)
+    # Size 4 (32px): Clock, timer, big slides, numbers (ASCII only)
+    s2_set = ascii_set | i18n_set | kana_set
+    s3_set = ascii_set | i18n_set
+    s4_set = ascii_set
+
+    print(f"Glyph allocations: Size 1={len(all_chars_set)}, Size 2={len(s2_set)}, Size 3={len(s3_set)}, Size 4={len(s4_set)}")
+
     glyphs = []
     for c in chars:
         u = ord(c)
@@ -175,14 +203,13 @@ def main():
         else:
             width = 8  # zenkaku
 
-        # 1. 8x8 bitmap (Misaki font for CJK, or M+ rendered)
+        # 1. 8x8 bitmap (Misaki font for CJK, or M+ rendered) - All characters
         data8 = None
         if uni_entries and u < len(uni_entries):
             idx = uni_entries[u]
             if idx != 0xFFFF and idx < len(data_entries):
                 raw8 = data_entries[idx]
                 if width == 6:
-                    # Align misaki 8x8 to width 6 if needed, or use M+
                     data8 = None
                 else:
                     data8 = raw8
@@ -193,31 +220,34 @@ def main():
         if not data8:
             data8 = [0] * 8
 
-        # 2. 16x16 bitmap (Shinonome font for CJK, M+ for ASCII/fallbacks)
+        # 2. 16x16 bitmap (Shinonome font for CJK, M+ for ASCII/fallbacks) - Only if in s2_set
         target_w16 = width * 2
         data16 = None
-        if width == 8 and u in shinonome_map:
-            data16 = shinonome_map[u]
-        elif font_mplus16:
-            data16 = render_bitmap(c, target_w16, 16, font_mplus16, bl16)
-        else:
-            data16 = [0] * 32
+        if c in s2_set:
+            if width == 8 and u in shinonome_map:
+                data16 = shinonome_map[u]
+            elif font_mplus16:
+                data16 = render_bitmap(c, target_w16, 16, font_mplus16, bl16)
+            else:
+                data16 = [0] * 32
 
-        # 3. 24x24 bitmap (M+ OFL 21pt centered with baseline anchor)
+        # 3. 24x24 bitmap (M+ OFL 21pt centered with baseline anchor) - Only if in s3_set
         target_w24 = width * 3
         data24 = None
-        if font_mplus24:
-            data24 = render_bitmap(c, target_w24, 24, font_mplus24, bl24)
-        else:
-            data24 = [0] * 72
+        if c in s3_set:
+            if font_mplus24:
+                data24 = render_bitmap(c, target_w24, 24, font_mplus24, bl24)
+            else:
+                data24 = [0] * 72
 
-        # 4. 32x32 bitmap (M+ OFL 27pt centered with baseline anchor)
+        # 4. 32x32 bitmap (M+ OFL 27pt centered with baseline anchor) - Only if in s4_set
         target_w32 = width * 4
         data32 = None
-        if font_mplus32:
-            data32 = render_bitmap(c, target_w32, 32, font_mplus32, bl32)
-        else:
-            data32 = [0] * 128
+        if c in s4_set:
+            if font_mplus32:
+                data32 = render_bitmap(c, target_w32, 32, font_mplus32, bl32)
+            else:
+                data32 = [0] * 128
 
         glyphs.append({
             "unicode": u,
@@ -233,20 +263,20 @@ def main():
     print(f"Writing {OUT_HEADER}...")
     with open(OUT_HEADER, "w", encoding="utf-8") as f:
         f.write("#pragma once\n")
-        f.write("// Free Japanese & Latin Font Subset with Direct Display Size Optimization\n")
-        f.write("// Size 1 (8px):   Misaki Font (CJK) / M+ (ASCII)\n")
-        f.write("// Size 2 (16px):  Shinonome Font (CJK) / M+ (ASCII)\n")
-        f.write("// Size 3 (24px):  M+ Font (SIL OFL 1.1) for all glyphs\n")
-        f.write("// Size 4 (32px):  M+ Font (SIL OFL 1.1) for all glyphs\n\n")
+        f.write("// Free Japanese & Latin Font Subset with Per-Size On-Demand Storage Optimization\n")
+        f.write("// Size 1 (8px):   Misaki Font (CJK) / M+ (ASCII) [All glyphs]\n")
+        f.write("// Size 2 (16px):  Shinonome Font (CJK) / M+ (ASCII) [Menus, UI, Kana]\n")
+        f.write("// Size 3 (24px):  M+ Font (SIL OFL 1.1) [Selected menus, ASCII]\n")
+        f.write("// Size 4 (32px):  M+ Font (SIL OFL 1.1) [Clock, Timer, ASCII]\n\n")
         f.write("#include <stdint.h>\n")
         f.write("#include <stddef.h>\n\n")
         f.write("struct SubsetGlyph {\n")
         f.write("    uint16_t unicode;\n")
-        f.write("    uint8_t width;      // 8 for fullwidth, 6 for ASCII, 4 for halfwidth kana\n")
-        f.write("    uint8_t data8[8];   // 8x8 font bitmap (size 1: 1 byte per row)\n")
-        f.write("    uint8_t data16[32]; // 16x16 font bitmap (size 2: 2 bytes per row, MSB on left)\n")
-        f.write("    uint8_t data24[72]; // 24x24 font bitmap (size 3: 3 bytes per row, MSB on left)\n")
-        f.write("    uint8_t data32[128]; // 32x32 font bitmap (size 4: 4 bytes per row, MSB on left)\n")
+        f.write("    uint8_t width;          // 8 for fullwidth, 6 for ASCII, 4 for halfwidth kana\n")
+        f.write("    uint8_t data8[8];       // 8x8 font bitmap (size 1) - always present\n")
+        f.write("    const uint8_t* data16;  // 16x16 font bitmap (size 2: 32 bytes) or nullptr\n")
+        f.write("    const uint8_t* data24;  // 24x24 font bitmap (size 3: 72 bytes) or nullptr\n")
+        f.write("    const uint8_t* data32;  // 32x32 font bitmap (size 4: 128 bytes) or nullptr\n")
         f.write("};\n\n")
         f.write("extern const SubsetGlyph kSubsetGlyphs[];\n")
         f.write("extern const size_t kSubsetGlyphsCount;\n\n")
@@ -256,22 +286,50 @@ def main():
     print(f"Writing {OUT_CPP}...")
     with open(OUT_CPP, "w", encoding="utf-8") as f:
         f.write('#include "subset_font.h"\n\n')
-        f.write("// Fully open-source / public domain font glyph dataset (Japanese + Latin)\n")
+        f.write("// Free Japanese & Latin Font Subset (Per-Size Allocated)\n\n")
+
+        # 1. Output Size 2 bitmap data
+        f.write("// --- Size 2 (16px) Bitmaps ---\n")
+        for g in glyphs:
+            if g["data16"] is not None:
+                u_hex = f"{g['unicode']:04X}"
+                d16_str = ", ".join(f"0x{b:02X}" for b in g["data16"])
+                f.write(f"static const uint8_t g_{u_hex}_d16[32] = {{ {d16_str} }};\n")
+        f.write("\n")
+
+        # 2. Output Size 3 bitmap data
+        f.write("// --- Size 3 (24px) Bitmaps ---\n")
+        for g in glyphs:
+            if g["data24"] is not None:
+                u_hex = f"{g['unicode']:04X}"
+                d24_str = ", ".join(f"0x{b:02X}" for b in g["data24"])
+                f.write(f"static const uint8_t g_{u_hex}_d24[72] = {{ {d24_str} }};\n")
+        f.write("\n")
+
+        # 3. Output Size 4 bitmap data
+        f.write("// --- Size 4 (32px) Bitmaps ---\n")
+        for g in glyphs:
+            if g["data32"] is not None:
+                u_hex = f"{g['unicode']:04X}"
+                d32_str = ", ".join(f"0x{b:02X}" for b in g["data32"])
+                f.write(f"static const uint8_t g_{u_hex}_d32[128] = {{ {d32_str} }};\n")
+        f.write("\n")
+
+        # 4. Output master table
+        f.write("// --- Master Glyph Table ---\n")
         f.write("const SubsetGlyph kSubsetGlyphs[] = {\n")
         for g in glyphs:
-            u_hex = f"0x{g['unicode']:04X}"
+            u_hex = f"{g['unicode']:04X}"
             d8_str = ", ".join(f"0x{b:02X}" for b in g["data8"])
-            d16_str = ", ".join(f"0x{b:02X}" for b in g["data16"])
-            d24_str = ", ".join(f"0x{b:02X}" for b in g["data24"])
-            d32_str = ", ".join(f"0x{b:02X}" for b in g["data32"])
+            p16 = f"g_{u_hex}_d16" if g["data16"] is not None else "nullptr"
+            p24 = f"g_{u_hex}_d24" if g["data24"] is not None else "nullptr"
+            p32 = f"g_{u_hex}_d32" if g["data32"] is not None else "nullptr"
             comment = g['char'] if g['char'] not in ('\\', '"', '\n', '\r', '\t') else f"U+{g['unicode']:04X}"
-            f.write(f"    // '{comment}' ({u_hex})\n")
+            f.write(f"    // '{comment}' (0x{u_hex})\n")
             f.write(f"    {{\n")
-            f.write(f"        {u_hex}, {g['width']},\n")
+            f.write(f"        0x{u_hex}, {g['width']},\n")
             f.write(f"        {{ {d8_str} }},\n")
-            f.write(f"        {{ {d16_str} }},\n")
-            f.write(f"        {{ {d24_str} }},\n")
-            f.write(f"        {{ {d32_str} }}\n")
+            f.write(f"        {p16}, {p24}, {p32}\n")
             f.write(f"    }},\n")
         f.write("};\n\n")
         f.write(f"const size_t kSubsetGlyphsCount = sizeof(kSubsetGlyphs) / sizeof(kSubsetGlyphs[0]);\n\n")
