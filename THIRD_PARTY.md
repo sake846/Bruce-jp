@@ -91,6 +91,16 @@ sequences and protocol state machines follow the upstream NFC HAL/stack.
   RFAL fork has no native Crypto1 support.
   Files: `src/modules/rfid/crypto1.{h,cpp}`.
 
+## ESP-SDR receiver and display — GPL-3.0-or-later
+
+- Upstream: [ESPARGOS/esp-sdr](https://github.com/ESPARGOS/esp-sdr).
+- License: GNU General Public License v3.0 or later; the upstream license is
+  retained at src/modules/wifi/esp_sdr/LICENSE.
+- Used by: the T-Embed CC1101 ESP-SDR receiver, FFT/spectrum pipeline, and
+  spectrum/waterfall renderer in src/modules/wifi/esp_sdr/.
+- Bruce-specific changes connect the upstream renderer to Bruce's initialized
+  TFT and rotary/button input, and expose its local receiver as a menu action.
+
 ## Bundled libraries (linked dependencies)
 
 Fetched via PlatformIO `lib_deps` (see `platformio.ini`) and linked into the

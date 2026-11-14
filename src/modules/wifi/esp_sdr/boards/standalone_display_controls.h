@@ -1,0 +1,146 @@
+#pragma once
+#include <stdbool.h>
+#include <stdint.h>
+#include "rx_tuning.h"
+#include "standalone_display.h"
+
+typedef enum { M5_MENU_NONE, M5_MENU_STEP, M5_MENU_SPAN } m5stack_menu_t;
+enum { M5_RX_AGC = 1, M5_RX_GAIN = 2, M5_RX_FILTER = 4 };
+
+typedef struct {
+    unsigned raw, stable, step, rate, fft, average;
+    m5stack_menu_t menu;
+    int y_pos, wf_bright, wf_contrast, filter;
+    unsigned wf_speed, agc, gain, gain_max, rx_dirty, about;
+    unsigned keyboard_frequency_value, keyboard_frequency_length;
+    uint32_t changed[3], b_pressed, last_input;
+    uint32_t keyboard_space_deadline;
+    bool suppress_release[3];
+    bool b_long, reset_done, density_mode, density_failed;
+    bool keyboard_space_pending, keyboard_space_down, keyboard_space_used;
+} m5stack_controls_t;
+
+static const unsigned m5stack_steps[] = {1, 5, 10, 20, 100};
+static const unsigned m5stack_rates[] = {6, 6, 6, 6, 1, 0};
+static const unsigned m5stack_spans[] = {2, 4, 8, 16, 40, 80};
+static const unsigned m5stack_fft_sizes[] = {256, 512, 1024, 2048, 4096};
+static const unsigned m5stack_average_counts[] = {1, 2, 4, 8, 16};
+static const unsigned m5stack_wf_intervals[] = {10, 5, 2, 1};
+
+static inline void m5stack_controls_defaults(m5stack_controls_t *s) {
+    s->step = 2;
+    s->rate = 5;
+    s->fft = 2;
+    s->average = 4;
+    s->y_pos = s->wf_bright = 0;
+    s->wf_contrast = 100;
+    s->wf_speed = 3;
+    s->agc = M5_AGC_SOFTWARE;
+    s->gain = 30;
+    s->filter = -1; /* Follow the selected span. */
+    s->about = 0;
+    s->density_mode = s->density_failed = false;
+    s->keyboard_frequency_value = s->keyboard_frequency_length = 0;
+    s->keyboard_space_pending = s->keyboard_space_down = s->keyboard_space_used = false;
+    s->keyboard_space_deadline = 0;
+}
+
+static inline int m5stack_adjust(int value, int direction, int step, int minimum, int maximum) {
+    int count = (maximum - minimum) / step + 1;
+    int index = (value - minimum) / step;
+    index = (index + direction % count) % count;
+    if (index < 0) index += count;
+    return minimum + index * step;
+}
+
+static inline void m5stack_menu_move(m5stack_controls_t *s, bool reverse) {
+    if (reverse) {
+        s->menu = s->menu == M5_MENU_NONE ? M5_MENU_SPAN :
+                  s->menu == M5_MENU_SPAN ? M5_MENU_STEP : M5_MENU_NONE;
+    } else {
+        s->menu = s->menu == M5_MENU_NONE ? M5_MENU_STEP :
+                  s->menu == M5_MENU_STEP ? M5_MENU_SPAN : M5_MENU_NONE;
+    }
+}
+
+static inline unsigned m5stack_menu_adjust(m5stack_controls_t *s, unsigned mhz, int direction) {
+    switch (s->menu) {
+    case M5_MENU_NONE: {
+        unsigned step = m5stack_steps[s->step];
+        return direction < 0 ? (mhz - RX_FREQ_MIN < step ? RX_FREQ_MIN : mhz - step) :
+                               (RX_FREQ_MAX - mhz < step ? RX_FREQ_MAX : mhz + step);
+    }
+    case M5_MENU_STEP: s->step = m5stack_adjust(s->step, direction, 1, 0, 4); break;
+    case M5_MENU_SPAN: s->rate = m5stack_adjust(s->rate, direction, 1, 0, 5); break;
+    default: break;
+    }
+    return mhz;
+}
+
+/* Synchronize PC/AGC changes without reapplying stale local values. */
+static inline bool m5stack_controls_sync_rx(m5stack_controls_t *s, unsigned *agc, unsigned *gain,
+                                           unsigned gain_max, int *filter, bool *follow_span) {
+    unsigned dirty = s->rx_dirty;
+    s->gain_max = gain_max;
+    if (dirty & M5_RX_AGC) *agc = s->agc;
+    if (dirty & M5_RX_GAIN) *gain = s->gain > gain_max ? gain_max : s->gain;
+    if (dirty & M5_RX_FILTER) {
+        *follow_span = s->filter < 0;
+        *filter = s->filter;
+    }
+    s->agc = *agc;
+    s->gain = *gain;
+    s->filter = *follow_span ? -1 : *filter;
+    s->rx_dirty = 0;
+    return dirty != 0;
+}
+
+/* GPIO37-39 have external pull-ups; debounce without blocking the serial loop. */
+static inline unsigned m5stack_controls_update(m5stack_controls_t *s, unsigned mhz, unsigned pressed,
+                                               uint32_t now, bool pc_control) {
+    if (pc_control) {
+        s->raw = s->stable = pressed;
+        s->menu = M5_MENU_NONE;
+        s->rx_dirty = 0;
+        s->b_long = true;
+        for (unsigned j = 0; j < 3; j++) {
+            s->changed[j] = now;
+            s->suppress_release[j] = true;
+        }
+        return mhz;
+    }
+#if CONFIG_ESP_SDR_M5STACK_PAPER_COLOR
+    const unsigned menu_timeout = 120000; /* Keep the menu visible across slow color refreshes. */
+#else
+    const unsigned menu_timeout = 5000;
+#endif
+    if (!s->raw && !s->stable && (uint32_t)(now - s->last_input) >= menu_timeout) s->menu = M5_MENU_NONE;
+    if (pressed || s->raw || s->stable) s->last_input = now;
+    for (unsigned j = 0; j < 3; j++) {
+        unsigned bit = 1u << j;
+        if ((pressed ^ s->raw) & bit) {
+            s->raw ^= bit;
+            s->changed[j] = now;
+        }
+        if (!((s->raw ^ s->stable) & bit) || (uint32_t)(now - s->changed[j]) < 30) continue;
+        s->stable ^= bit;
+        s->last_input = now;
+        if (j == 1) {
+            if (s->stable & bit) {
+                s->b_pressed = now;
+                s->b_long = false;
+            } else if (!s->b_long) {
+                m5stack_menu_move(s, false);
+            }
+        } else if (s->stable & bit) {
+            s->suppress_release[j] = false;
+        } else if (!s->suppress_release[j]) {
+            mhz = m5stack_menu_adjust(s, mhz, j == 0 ? -1 : 1);
+        }
+    }
+    if ((s->stable & 2) && !s->b_long && (uint32_t)(now - s->b_pressed) >= 600) {
+        m5stack_menu_move(s, true);
+        s->b_long = true;
+    }
+    return mhz;
+}

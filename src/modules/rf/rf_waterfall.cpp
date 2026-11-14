@@ -1,4 +1,5 @@
 #include "rf_waterfall.h"
+#include <vector>
 #ifndef TFT_MOSI
 #define TFT_MOSI -1
 #endif
@@ -64,44 +65,75 @@ void rf_waterfall_run() {
     const int screen_width = tft.width();
     const int screen_height = tft.height();
     const int display_top = screen_height / 5;
+    const int plot_left = 34;
+    const int plot_width = screen_width - plot_left;
+    const int plot_height = screen_height - display_top;
     float f_freq_step;
 
     // Alloc framebuffer
     uint16_t frameBuffer[screen_width] = {0};
+    std::vector<unsigned long> row_scan_numbers(plot_height, 0);
 
     int current_line = display_top;
+    unsigned long scan_number = 0;
     initRfModule("rx", f_start);
 
     float max_freq = f_start;
     int max_rssi = -100;
     unsigned long lastMaxUpdate = millis();
-
-    tft.fillRect(0, 0, screen_width, display_top, TFT_BLACK);
-
     int selected_item = 0;
     bool exitting = false;
     unsigned long exit_time = 0;
 
-    while (1) {
-        for (int i = 0; i < 4; i++) {
-            int x = i * (screen_width / 4);
-            float f_freq = f_start + (f_end - f_start) * i / 4.0;
-            tft.setCursor(x, 0);
-            tft.setTextSize(1);
+    tft.fillScreen(TFT_BLACK);
 
-            if (i == 0 && selected_item == 0) {
-                tft.setTextColor(TFT_PINK, TFT_BLACK);
-            } else if (i == 3 && selected_item == 1) {
-                tft.setTextColor(TFT_PINK, TFT_BLACK);
-            } else {
-                tft.setTextColor(TFT_WHITE, TFT_BLACK);
-            }
-
-            tft.drawFastVLine(x, 0, tft.height(), TFT_DARKGREY);
-            tft.print(String(f_freq, 1));
+    auto draw_frequency_grid = [&]() {
+        tft.setTextSize(1);
+        for (int tick = 0; tick <= 4; ++tick) {
+            const int x = plot_left + (plot_width - 1) * tick / 4;
+            const float frequency = f_start + (f_end - f_start) * tick / 4.0f;
+            char label[12];
+            snprintf(label, sizeof(label), "%.1f", frequency);
+            tft.setTextColor(
+                (tick == 0 && selected_item == 0) || (tick == 4 && selected_item == 1) ? TFT_PINK
+                                                                                        : TFT_WHITE,
+                TFT_BLACK
+            );
+            if (tick == 0) tft.drawString(label, x, 0);
+            else if (tick == 4) tft.drawRightString(label, x, 0);
+            else tft.drawCentreString(label, x, 0);
+            tft.drawFastVLine(x, display_top, plot_height, TFT_DARKGREY);
         }
+    };
+    auto draw_scan_age_grid = [&]() {
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        for (int tick = 0; tick <= 4; ++tick) {
+            const int y = display_top + (plot_height - 1) * tick / 4;
+            const unsigned long row_scan = row_scan_numbers[y - display_top];
+            const String label = row_scan == 0 ? "--" : String(scan_number - row_scan);
+            const int label_y = min(y - 4, screen_height - 8);
+            tft.fillRect(0, label_y, plot_left - 3, 8, TFT_BLACK);
+            tft.drawRightString(label, plot_left - 4, label_y);
+            tft.drawFastHLine(plot_left, y, plot_width, TFT_DARKGREY);
+        }
+    };
+    tft.setCursor(0, 10);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.print("sweeps ago");
+    tft.drawCentreString("Frequency (MHz)", plot_left + plot_width / 2, 10);
+    tft.setCursor(plot_left, 20);
+    tft.setTextColor(TFT_DARKCYAN, TFT_BLACK);
+    tft.print("[OK] Item [PREV/NEXT] Value ");
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.print("EXIT");
+    draw_frequency_grid();
+    draw_scan_age_grid();
 
-        f_freq_step = (f_end - f_start) / screen_width;
+    while (1) {
+        draw_frequency_grid();
+
+        f_freq_step = (f_end - f_start) / (plot_width - 1);
 
         float temp_max_freq = f_start;
         int temp_max_rssi = -100;
@@ -115,7 +147,7 @@ void rf_waterfall_run() {
         else if (range > 0.1) step = 0.01;
         else step = 0.001;
 
-        for (int i = 0; i < screen_width; ++i) {
+        for (int i = 0; i < plot_width; ++i) {
             float f_freq = f_start + i * f_freq_step;
             setMHZ(f_freq);
             // To make sure CC1101 shared with TFT works properly on T-Embed
@@ -174,8 +206,14 @@ void rf_waterfall_run() {
             }
         }
         tft.drawPixel(0, 0, 0); // Cardputer Case, need to call something to the tft.
-        tft.pushImage(0, current_line, screen_width, 1, frameBuffer);
-        tft.drawFastHLine(0, current_line + 1, screen_width, TFT_DARKGREY);
+        tft.pushImage(plot_left, current_line, plot_width, 1, frameBuffer);
+        row_scan_numbers[current_line - display_top] = ++scan_number;
+        tft.drawFastHLine(plot_left, current_line, plot_width, TFT_DARKGREY);
+        for (int tick = 0; tick <= 4; ++tick) {
+            const int x = plot_left + (plot_width - 1) * tick / 4;
+            tft.drawPixel(x, current_line, TFT_DARKGREY);
+        }
+        draw_scan_age_grid();
 
         if (millis() - lastMaxUpdate >= 5000) {
             max_rssi = temp_max_rssi;
@@ -189,7 +227,8 @@ void rf_waterfall_run() {
             lastMaxUpdate = millis();
         }
 
-        tft.setCursor(3, 20);
+        tft.fillRect(plot_left, 20, screen_width - plot_left, 10, TFT_BLACK);
+        tft.setCursor(plot_left, 20);
         tft.setTextColor(TFT_DARKCYAN);
         tft.print("[OK] Item [PREV/NEXT] Value ");
 

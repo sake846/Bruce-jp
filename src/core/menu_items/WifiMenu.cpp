@@ -1,4 +1,7 @@
 #include "WifiMenu.h"
+#ifdef T_EMBED_1101
+#include "modules/wifi/esp_sdr/esp_sdr.h"
+#endif
 #include "core/display.h"
 #include "core/settings.h"
 #include "core/utils.h"
@@ -59,6 +62,9 @@ void WifiMenu::optionsMenu() {
     if (WiFi.getMode() & WIFI_MODE_STA && WiFi.isConnected()) {
         options.push_back({"AP info", displayAPInfo});
     }
+#ifdef T_EMBED_1101
+    options.push_back({"ESP-SDR", espSdrMenu});
+#endif
     options.push_back({"Wifi Atks", wifi_atk_menu});
     options.push_back({"Evil Portal", [=]() {
                            // WebUI cleanup now handled automatically inside EvilPortal constructor
