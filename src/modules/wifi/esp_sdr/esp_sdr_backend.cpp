@@ -32,3 +32,7 @@ extern "C" unsigned esp_sdr_bruce_poll_controls(m5stack_controls_t *controls, un
 extern "C" int esp_sdr_bruce_battery_percent(void) {
     return getBattery();
 }
+
+extern "C" int board_battery_percent(void) {
+    return esp_sdr_bruce_battery_percent();
+}

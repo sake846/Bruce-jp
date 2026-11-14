@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #if CONFIG_ESP_SDR_BRUCE
+#include "standalone_device_lilygo_ats_mini.h"
 #include "standalone_display_controls.h"
 #ifdef __cplusplus
 extern "C" {
@@ -80,4 +81,5 @@ static inline void standalone_display_backend_power_off(void) {
 }
 #else
 #error Select a standalone display device
+#endif
 #endif

@@ -15,12 +15,16 @@ typedef struct {
 } GFXfont;
 
 #define PROGMEM
-#include "../../components/M5GFX/src/lgfx/Fonts/Custom/DejaVu9.h"
-#include "../../components/M5GFX/src/lgfx/Fonts/Custom/DejaVu12.h"
-#include "../../components/M5GFX/src/lgfx/Fonts/Custom/DejaVu18.h"
-#include "../../components/M5GFX/src/lgfx/Fonts/GFXFF/FreeSansBold9pt7b.h"
-#include "../../components/M5GFX/src/lgfx/Fonts/GFXFF/FreeSansBold12pt7b.h"
+#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSans9pt7b.h"
+#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSans12pt7b.h"
+#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSans18pt7b.h"
+#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSansBold9pt7b.h"
+#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSansBold12pt7b.h"
 #undef PROGMEM
+
+#define DejaVu9 FreeSans9pt7b
+#define DejaVu12 FreeSans12pt7b
+#define DejaVu18 FreeSans18pt7b
 
 static unsigned m5stack_text_width(const char *text, const GFXfont *font) {
     unsigned width = 0;

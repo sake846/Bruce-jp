@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <string.h>
 
+unsigned spectrum_dc_mode = 1;
+
 #define MAX_SPEC_FFT 2048u
 #if SPEC_HEAP_WORKSPACE
 #define MAX_FFT 4096u

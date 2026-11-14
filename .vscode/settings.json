@@ -106,4 +106,8 @@
         },
         "editor.formatOnType": true,
     },
+    "clangd.arguments": [
+        "--compile-commands-dir=c:/Users/user/source/codex/bruce-jp/.cache/clangd",
+        "--query-driver=C:/Users/user/.platformio/packages/toolchain-*/bin/*,C:/Users/user/.platformio/packages/tool-*/bin/*"
+    ],
 }

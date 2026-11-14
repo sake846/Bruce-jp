@@ -111,14 +111,6 @@ static void rx_filter_restore(void) {
     if (rx_filter >= 0)
         for (unsigned j = 0; j < 2; j++) rom_chip_i2c_writeReg(0x67, 0, 4 + j, rx_filter_saved[j]);
 }
-/* Required by the stock RF test archive; no shell is exposed. */
-int cmd_parse(char *cmd, char *name, int *argc, char **argv) {
-    (void)cmd;
-    (void)name;
-    (void)argc;
-    (void)argv;
-    return -1;
-}
 #define send_bytes burst_serial_send
 static void reply(const char *s) {
 #if CONFIG_ESP_SDR_M5STACK || CONFIG_ESP_SDR_LILYGO || CONFIG_ESP_SDR_ATS_MINI
