@@ -1,8 +1,8 @@
 // Borrowed from https://github.com/justcallmekoko/ESP32Marauder/
 // Learned from https://github.com/risinek/esp32-wifi-penetration-tool/
 // Arduino IDE needs to be tweeked to work, follow the instructions:
-// https://github.com/justcallmekoko/ESP32Marauder/wiki/arduino-ide-setup But change the file in:
-// C:\Users\<YOur User>\AppData\Local\Arduino15\packages\m5stack\hardware\esp32\2.0.9
+// https://github.com/justcallmekoko/ESP32Marauder/wiki/arduino-ide-setup. Edit the board package
+// under your Arduino data directory: packages\m5stack\hardware\esp32\2.0.9.
 #include "wifi_atks.h"
 #include "core/display.h"
 #include "core/main_menu.h"

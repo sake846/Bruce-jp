@@ -1,6 +1,6 @@
 #pragma once
 
-/* Read the bundled M5GFX bitmaps directly without its C++ display driver. */
+/* Use the bundled TFT_eSPI FreeSans bitmaps without its C++ display driver. */
 typedef struct {
     uint16_t bitmapOffset;
     uint8_t width, height, xAdvance;
@@ -15,11 +15,11 @@ typedef struct {
 } GFXfont;
 
 #define PROGMEM
-#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSans9pt7b.h"
-#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSans12pt7b.h"
-#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSans18pt7b.h"
-#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSansBold9pt7b.h"
-#include "../../../../../lib/TFT_eSPI/Fonts/GFXFF/FreeSansBold12pt7b.h"
+#include <Fonts/GFXFF/FreeSans9pt7b.h>
+#include <Fonts/GFXFF/FreeSans12pt7b.h>
+#include <Fonts/GFXFF/FreeSans18pt7b.h>
+#include <Fonts/GFXFF/FreeSansBold9pt7b.h>
+#include <Fonts/GFXFF/FreeSansBold12pt7b.h>
 #undef PROGMEM
 
 #define DejaVu9 FreeSans9pt7b

@@ -166,10 +166,10 @@ def generate_headers():
             if os.path.exists(os.path.join(BJS_INTERPRETER_PATH, "mqjs_stdlib.h")):
                 print("Host compiler not found; skipping mqjs_stdlib header generation.")
                 print("Set MQJS_HOST_CC or mqjs_host_cc to a GCC-compatible compiler, or use Docker.")
-                print("\nOn Windows:\n- install MSYS2 https://www.msys2.org/ at default path")
-                print("- open C:\\msys64\\ucrt64.exe")
+                print("\nOn Windows:\n- install MSYS2 https://www.msys2.org/")
+                print("- open the MSYS2 UCRT64 terminal")
                 print("- run on UCRT64 terminal: pacman -S --needed mingw-w64-i686-toolchain")
-                print("- add C:\\msys64\\mingw32\\bin to PATH, cmd: setx PATH \"%PATH%;C:\\msys64\\mingw32\\bin\\\"")
+                print("- add the toolchain's bin directory to PATH, or set MQJS_HOST_CC to gcc.exe")
                 print("- close and open VSCode again")
                 print("\nOn Mac:\n- run on terminal: xcode-select --install")
                 print("\nOn Linux:\n- run on terminal: sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386\n\n")

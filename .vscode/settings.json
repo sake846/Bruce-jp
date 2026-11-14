@@ -94,8 +94,6 @@
     ],
 
     "cmake.ignoreCMakeListsMissing": true,
-    "cmake.sourceDirectory": "C:/Projetos/Bruce/lib/M5GFX",
-
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools",
         "editor.rulers": [120],
@@ -106,8 +104,4 @@
         },
         "editor.formatOnType": true,
     },
-    "clangd.arguments": [
-        "--compile-commands-dir=c:/Users/user/source/codex/bruce-jp/.cache/clangd",
-        "--query-driver=C:/Users/user/.platformio/packages/toolchain-*/bin/*,C:/Users/user/.platformio/packages/tool-*/bin/*"
-    ],
 }
