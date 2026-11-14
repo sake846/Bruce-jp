@@ -126,6 +126,10 @@ static const TranslationEntry kTranslations[] = {
     {"Transmit RAW", "RAW送信"},
     {"Jammer", "ジャマー (妨害)"},
     {"Spectrum", "スペクトラム"},
+    {"Pulse Duration", "パルス長"},
+    {"RSSI Strength", "RSSI 受信強度"},
+    {"Pulse Waveform", "パルス波形"},
+    {"Waterfall", "ウォーターフォール"},
     {"Saved", "保存データ"},
 
     // RFID / NFC Submenu
